@@ -360,7 +360,7 @@ function Get-CVE {
                             # If we're not filtering, or if the affected product matches the Part, Vendor and Product (we are using -like for wildcard search, and null values were converted to * earlier on)
                             if (!$FilterAffectedProducts -or ($matches[1] -like $Part -and $matches[2] -like $Vendor -and $matches[3] -like $Product)) {
                                 [PSCustomObject]@{
-                                    Vulnerable            = $MatchCriteria.vulnerable
+                                    Vulnerable            = [bool]$MatchCriteria.vulnerable
                                     Criteria              = $MatchCriteria.criteria
                                     MatchCriteriaID       = $MatchCriteria.matchCriteriaId
                                     ProductType           = $AffectedProductType
