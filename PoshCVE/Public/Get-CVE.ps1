@@ -335,7 +335,7 @@ function Get-CVE {
                 foreach ($CVE in $Response.vulnerabilities.cve) {
 
                     # .Where method used for speed over Where-Object, preceding value wrapped in @() array to avoid errors when single results found.
-                    $AffectedProducts = foreach ($MatchCriteria in @(@($CVE.configurations.nodes).Where({ $_.operator -eq 'OR' -and $_.negate -eq $false }).cpeMatch).Where({ $_.vulnerable -eq $true })) {
+                    $AffectedProducts = foreach ($MatchCriteria in @($CVE.configurations.nodes).Where({ $_.operator -eq 'OR' -and $_.negate -eq $false }).cpeMatch) {
 
                         # Use a RegEx to extract all of the portions of the criteria string
                         if ($MatchCriteria.criteria -match "^cpe:2.3:([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):([^:]+)") {
@@ -360,6 +360,7 @@ function Get-CVE {
                             # If we're not filtering, or if the affected product matches the Part, Vendor and Product (we are using -like for wildcard search, and null values were converted to * earlier on)
                             if (!$FilterAffectedProducts -or ($matches[1] -like $Part -and $matches[2] -like $Vendor -and $matches[3] -like $Product)) {
                                 [PSCustomObject]@{
+                                    Vulnerable            = $MatchCriteria.vulnerable
                                     Criteria              = $MatchCriteria.criteria
                                     MatchCriteriaID       = $MatchCriteria.matchCriteriaId
                                     ProductType           = $AffectedProductType
