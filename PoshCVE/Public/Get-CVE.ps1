@@ -43,8 +43,11 @@
     Get-CVE -ID CVE-2023-4863
     Retrieves information about the specific CVE-2023-4863 entry.
 .EXAMPLE
-    Get-CVE -ProductType Application -Vendor Google -Product Chrome -PublishStartDate (Get-Date).AddDays(-14) -FilterAffectedProducts
-    Retrieves information about the all Google Chrome CVEs published within the last 14 days, only showing the affected Google Chrome products for each (ignoring Linux distros, etc).
+    Get-CVE -Vendor 'Google' -Product 'Chrome' -PublishStartDate (Get-Date).AddDays(-30) -FilterAffectedProducts
+    Retrieves information about the all Google Chrome CVEs published within the last 30 days, only showing the affected Google Chrome products for each (ignoring Linux distros, etc).
+.EXAMPLE
+    Get-CVE -Vendor 'Microsoft' -Product 'Windows_11_23H2' -PublishStartDate (Get-Date).AddDays(-30)
+    Retrieves information about the Windows 11 23H2 CVEs published within the last 30 days.
 #>
 function Get-CVE {
     [CmdletBinding()]
