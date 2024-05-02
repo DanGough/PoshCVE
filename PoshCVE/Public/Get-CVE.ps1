@@ -135,6 +135,11 @@ function Get-CVE {
     $PublishRanges = @(@{ StartDate = $null; EndDate = $null })
     $LastModifiedRanges = @(@{ StartDate = $null; EndDate = $null })
 
+    # Add user agent to resolve 404 errors
+    $Headers = @{
+        "User-Agent" = 'PoshCVE'
+    }
+
     # Check for NVDAPIKey environment variable if $APIKey not supplied
     # It is allowed to submit a $APIKey as $null to override your environment variable, hence checking PSBoundParameters
     if ($PSBoundParameters.Keys -notcontains 'APIKey' -and $env:NVDAPIKey) {
@@ -142,11 +147,11 @@ function Get-CVE {
         $APIKey = $env:NVDAPIKey
     }
     if ($APIKey) {
-        $Headers = @{apiKey = $APIKey }
+        Write-Verbose "Using API key $($APIKey -replace '(?<=.{9})\w', '*')"
+        $Headers['apiKey'] = $APIKey
     }
     else {
         Write-Verbose 'No API key supplied'
-        $Headers = $null
     }
 
     # Set initial values for API query
@@ -283,7 +288,7 @@ function Get-CVE {
     }
 
     # Use nested loops to check each range of publishing dates and last modified dates
-    foreach ($PublishRange in $PublishRanges) {
+    $Output = foreach ($PublishRange in $PublishRanges) {
 
         # If date range is specified, convert to the format that the API expects
         if ($PublishRange.StartDate) {
@@ -312,6 +317,7 @@ function Get-CVE {
                 try {
                     # Get response and show total number of results in verbose information
                     $Response = Invoke-RestMethod -Method Get -Uri $Endpoint -Headers $Headers -Body $Body -ErrorAction Stop
+                    Start-Sleep -Seconds 6
                     if ($Response.totalResults -eq 1) {
                         Write-Verbose "1 result in total"
                     }
@@ -386,14 +392,34 @@ function Get-CVE {
                         }
                     }
 
+                    if ($CVSSData = @($CVE.metrics.cvssMetricV31).Where({ $_.type -eq 'Primary' })) {
+                        $CVSSv3Severity = $CVSSData.baseSeverity
+                        $CVSSv3Score    = $CVSSData.baseScore
+                    }
+                    elseif ($CVSSData = @($CVE.metrics.cvssMetricV30).Where({ $_.type -eq 'Primary' })) {
+                        $CVSSv3Severity = $CVSSData.baseSeverity
+                        $CVSSv3Score    = $CVSSData.baseScore
+                    }
+                    elseif ($CVSSData = @($CVE.metrics.cvssMetricV31).Where({ $_.type -eq 'Secondary' })) {
+                        $CVSSv3Severity = $CVSSData.baseSeverity
+                        $CVSSv3Score    = $CVSSData.baseScore
+                    }
+                    elseif ($CVSSData = @($CVE.metrics.cvssMetricV30).Where({ $_.type -eq 'Secondary' })) {
+                        $CVSSv3Severity = $CVSSData.baseSeverity
+                        $CVSSv3Score    = $CVSSData.baseScore
+                    }
+                    else {
+                        $CVSSv3Severity = $CVSSv3Score = $null 
+                    }
+
                     [PSCustomObject]@{
                         CVE              = $CVE.id
                         Published        = $CVE.published
                         LastModified     = $CVE.lastModified
                         CVSSv2Severity   = @($CVE.metrics.cvssMetricV2).Where({ $_.type -eq 'Primary' }).baseSeverity
                         CVSSv2Score      = @($CVE.metrics.cvssMetricV2).Where({ $_.type -eq 'Primary' }).cvssData.baseScore
-                        CVSSv3Severity   = @($CVE.metrics.cvssMetricV31).Where({ $_.type -eq 'Primary' }).cvssData.baseSeverity
-                        CVSSv3Score      = @($CVE.metrics.cvssMetricV31).Where({ $_.type -eq 'Primary' }).cvssData.baseScore
+                        CVSSv3Severity   = $CVSSv3Severity
+                        CVSSv3Score      = $CVSSv3Score
                         Exploited        = [bool]$CVE.cisaExploitAdd # Indicates whether the CVE has a known exploit listed on https://www.cisa.gov/known-exploited-vulnerabilities-catalog
                         Description      = @($CVE.descriptions).Where({ $_.lang -eq 'en' }).value
                         URL              = "https://nvd.nist.gov/vuln/detail/$($CVE.id)"
@@ -409,4 +435,14 @@ function Get-CVE {
         }
     }
 
+    if ($Output) {
+        $Output
+    }
+    else {
+        $ValidParams = @('ID','ProductType','Vendor','Product','KeyWord','KeyWordExact','Version','MinVersion','MinVersionType','MaxVersion','MaxVersionType','LastModifiedStartDate','LastModifiedEndDate','PublishStartDate','PublishEndDate')
+        $SearchParams = $PSBoundParameters.GetEnumerator() | Where-Object Key -in $ValidParams | ForEach-Object {
+            Write-Output "$($_.Key): $($_.Value)"
+        }
+        Write-Warning "No results found for $($SearchParams -join '; ')"
+    }
 }
