@@ -118,8 +118,12 @@ function Get-CVE {
         [Parameter()]
         [switch]$FilterAffectedProducts,
         
-        [Parameter(Mandatory = $false)]
-        [string]$APIKey
+        [Parameter()]
+        [string]$APIKey,
+
+        [Parameter()]
+        [ValidateRange(0, [int]::MaxValue)]
+        [int]$Interval = 0
     )
 
     # Suppress progress bars from calling Invoke-RestMethod
@@ -127,6 +131,9 @@ function Get-CVE {
 
     # NVD API URL
     $Endpoint = 'https://services.nvd.nist.gov/rest/json/cves/2.0'
+
+    # Check if we've already called the API once in this function call
+    $APICalled = $false
 
     # API supports a max date range of 120 days per request - longer spans needs to be split up into multiple requests
     $MaxDays = 120
@@ -315,9 +322,18 @@ function Get-CVE {
                 Write-Verbose ((@("Body:") + $Body.Keys.ForEach({ "$_ = $($Body[$_])" })) -join "`n")
 
                 try {
+
+                    # If API has already been called at least once, sleep for $Interval milliseconds before next call to avoid rate limiting
+                    if ($APICalled) {
+                        Start-Sleep -Milliseconds $Interval
+                    }
+                    else {
+                        $APICalled = $true
+                    }
+
                     # Get response and show total number of results in verbose information
                     $Response = Invoke-RestMethod -Method Get -Uri $Endpoint -Headers $Headers -Body $Body -ErrorAction Stop
-                    Start-Sleep -Seconds 6
+                    
                     if ($Response.totalResults -eq 1) {
                         Write-Verbose "1 result in total"
                     }
