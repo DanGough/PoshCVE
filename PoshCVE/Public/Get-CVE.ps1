@@ -14,7 +14,7 @@
 .PARAMETER KeyWord
     Specifies a keyword to search for in the CVE entry description.
 .PARAMETER KeyWordExact
-    Indicates that the keyword search should be exact. By default, if KeyWord contains multiple words, they will be searched for anywhere in any order.
+    Indicates that the keyword search should match an exact phrase. By default, if KeyWord contains multiple words, they will be searched for anywhere in any order.
 .PARAMETER Version
     Specifies the version of the product to search for.
 .PARAMETER MinVersion
@@ -39,6 +39,8 @@
     Indicates whether to filter the products affected by each CVE to match the ProductType / Vendor / Product specified in the search parameters.
 .PARAMETER APIKey
     Specifies the API key to use for the NVD API. This is optional but you may be rate limited if using the public API. You can request a free API key here: https://nvd.nist.gov/developers/request-an-api-key
+.PARAMETER Interval
+    Specifies the interval in milliseconds to wait between API calls. This is useful to avoid rate limiting. The default is 0.
 .EXAMPLE
     Get-CVE -ID CVE-2023-4863
     Retrieves information about the specific CVE-2023-4863 entry.
@@ -52,66 +54,66 @@
 function Get-CVE {
     [CmdletBinding()]
     param(
-        [Parameter()]
+        [Parameter(ParameterSetName = 'ByID')]
         [ValidateNotNullOrEmpty()]
         [string]$ID,
-        
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateSet('Application', 'Hardware', 'OperatingSystem')]
         [string]$ProductType,
-
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateNotNullOrEmpty()]
         [string]$Vendor,
-        
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateNotNullOrEmpty()]
         [string]$Product,
-        
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateNotNullOrEmpty()]
         [string]$KeyWord,
-
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [switch]$KeyWordExact,
-
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateNotNullOrEmpty()]
         [string]$Version,
-
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateNotNullOrEmpty()]
         [string]$MinVersion,
-        
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateSet('Including', 'Excluding')]
         [string]$MinVersionType = 'Including',
-        
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateNotNullOrEmpty()]
         [string]$MaxVersion,
-        
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateSet('Including', 'Excluding')]
         [string]$MaxVersionType = 'Including',
-        
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateNotNullOrEmpty()]
         [datetime]$LastModifiedStartDate,
-        
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateNotNullOrEmpty()]
         [datetime]$LastModifiedEndDate,
-        
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateNotNullOrEmpty()]
         [datetime]$PublishStartDate,
-        
-        [Parameter()]
+    
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateNotNullOrEmpty()]
         [datetime]$PublishEndDate,
 
-        [Parameter()]
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateRange(1, [int]::MaxValue)]
         [int]$MaxResults,
 
@@ -121,7 +123,7 @@ function Get-CVE {
         [Parameter()]
         [string]$APIKey,
 
-        [Parameter()]
+        [Parameter(ParameterSetName = 'BySearch')]
         [ValidateRange(0, [int]::MaxValue)]
         [int]$Interval = 0
     )
@@ -163,12 +165,15 @@ function Get-CVE {
 
     # Set initial values for API query
     $Body = @{
-        startIndex = 0
+        startIndex     = 0
         resultsPerPage = 2000 # this is both the recommended default and maximum value allowed
     }
 
     if ($ID) {
         $Body.cveId = $ID
+    }
+    else {
+
     }
 
     if ($ProductType -or $Vendor -or $Product -or $Version -or $MinVersion -or $MaxVersion) {
@@ -188,27 +193,38 @@ function Get-CVE {
             }
         }
         # Replace Vendor/Product/Version with * if they are null
-        if (!$Vendor) { $Vendor = '*' }
-        if (!$Product) { $Product = '*' }
-        if (!$Version) { $Version = '*' }
+        if ([string]::IsNullOrEmpty($Vendor)) {
+            $MatchVendor = '*'
+        }
+        else {
+            $MatchVendor = $Vendor
+        }
+        if ([string]::IsNullOrEmpty($Product)) {
+            $MatchProduct = '*'
+        }
+        else {
+            $MatchProduct = $Product
+        }
+        if ([string]::IsNullOrEmpty($Version)) {
+            $MatchVersion = '*'
+        }
+        else {
+            $MatchVersion = $Version
+        }
         # A virtualMatchString is required if any of these parameters are supplied
-        $Body.virtualMatchString = "cpe:2.3:$Part`:$Vendor`:$Product`:$Version"
+        $Body.virtualMatchString = "cpe:2.3:$Part`:$MatchVendor`:$MatchProduct`:$MatchVersion"
     }
 
-    if ($MinVersion -and -not $Version) {
+    if ($MinVersion -and [string]::IsNullOrEmpty($Version)) {
         # API does not allow min/max version in combination with a specific version, so ignore MinVersion if Version is specified
-        if ($Version -eq '*') {
-            $Body.versionStart = $MinVersion
-            $Body.versionStartType = $MinVersionType.ToLower()
-        }
+        $Body.versionStart = $MinVersion
+        $Body.versionStartType = $MinVersionType.ToLower()
     }
 
-    if ($MaxVersion -and -not $Version) {
+    if ($MaxVersion -and [string]::IsNullOrEmpty($Version)) {
         # API does not allow min/max version in combination with a specific version, so ignore MaxVersion if Version is specified
-        if ($Version -eq '*') {
-            $Body.versionEnd = $MaxVersion
-            $Body.versionEndType = $MaxVersionType.ToLower()
-        }
+        $Body.versionEnd = $MaxVersion
+        $Body.versionEndType = $MaxVersionType.ToLower()
     }
 
     if ($KeyWord) {
@@ -299,16 +315,16 @@ function Get-CVE {
 
         # If date range is specified, convert to the format that the API expects
         if ($PublishRange.StartDate) {
-            $Body.pubStartDate = $PublishRange.StartDate.ToString('o').Replace('Z','+00:00')
-            $Body.pubEndDate = $PublishRange.EndDate.ToString('o').Replace('Z','+00:00')
+            $Body.pubStartDate = $PublishRange.StartDate.ToString('o').Replace('Z', '+00:00')
+            $Body.pubEndDate = $PublishRange.EndDate.ToString('o').Replace('Z', '+00:00')
         }
 
         foreach ($LastModifiedRange in $LastModifiedRanges) {
     
             # If date range is specified, convert to the format that the API expects
             if ($LastModifiedRange.StartDate) {
-                $Body.lastModStartDate = $LastModifiedRange.StartDate.ToString('o').Replace('Z','+00:00')
-                $Body.lastModEndDate = $LastModifiedRange.EndDate.ToString('o').Replace('Z','+00:00')
+                $Body.lastModStartDate = $LastModifiedRange.StartDate.ToString('o').Replace('Z', '+00:00')
+                $Body.lastModEndDate = $LastModifiedRange.EndDate.ToString('o').Replace('Z', '+00:00')
             }
             
             do {
@@ -410,19 +426,19 @@ function Get-CVE {
 
                     if ($CVSSData = @($CVE.metrics.cvssMetricV31).Where({ $_.type -eq 'Primary' }).cvssdata) {
                         $CVSSv3Severity = $CVSSData.baseSeverity
-                        $CVSSv3Score    = $CVSSData.baseScore
+                        $CVSSv3Score = $CVSSData.baseScore
                     }
                     elseif ($CVSSData = @($CVE.metrics.cvssMetricV30).Where({ $_.type -eq 'Primary' }).cvssdata) {
                         $CVSSv3Severity = $CVSSData.baseSeverity
-                        $CVSSv3Score    = $CVSSData.baseScore
+                        $CVSSv3Score = $CVSSData.baseScore
                     }
                     elseif ($CVSSData = @($CVE.metrics.cvssMetricV31).Where({ $_.type -eq 'Secondary' }).cvssdata) {
                         $CVSSv3Severity = $CVSSData.baseSeverity
-                        $CVSSv3Score    = $CVSSData.baseScore
+                        $CVSSv3Score = $CVSSData.baseScore
                     }
                     elseif ($CVSSData = @($CVE.metrics.cvssMetricV30).Where({ $_.type -eq 'Secondary' }).cvssdata) {
                         $CVSSv3Severity = $CVSSData.baseSeverity
-                        $CVSSv3Score    = $CVSSData.baseScore
+                        $CVSSv3Score = $CVSSData.baseScore
                     }
                     else {
                         $CVSSv3Severity = $CVSSv3Score = $null 
@@ -455,7 +471,7 @@ function Get-CVE {
         $Output
     }
     else {
-        $ValidParams = @('ID','ProductType','Vendor','Product','KeyWord','KeyWordExact','Version','MinVersion','MinVersionType','MaxVersion','MaxVersionType','LastModifiedStartDate','LastModifiedEndDate','PublishStartDate','PublishEndDate')
+        $ValidParams = @('ID', 'ProductType', 'Vendor', 'Product', 'KeyWord', 'KeyWordExact', 'Version', 'MinVersion', 'MinVersionType', 'MaxVersion', 'MaxVersionType', 'LastModifiedStartDate', 'LastModifiedEndDate', 'PublishStartDate', 'PublishEndDate')
         $SearchParams = $PSBoundParameters.GetEnumerator() | Where-Object Key -in $ValidParams | ForEach-Object {
             Write-Output "$($_.Key): $($_.Value)"
         }
