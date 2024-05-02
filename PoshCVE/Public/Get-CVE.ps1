@@ -392,19 +392,19 @@ function Get-CVE {
                         }
                     }
 
-                    if ($CVSSData = @($CVE.metrics.cvssMetricV31).Where({ $_.type -eq 'Primary' })) {
+                    if ($CVSSData = @($CVE.metrics.cvssMetricV31).Where({ $_.type -eq 'Primary' }).cvssdata) {
                         $CVSSv3Severity = $CVSSData.baseSeverity
                         $CVSSv3Score    = $CVSSData.baseScore
                     }
-                    elseif ($CVSSData = @($CVE.metrics.cvssMetricV30).Where({ $_.type -eq 'Primary' })) {
+                    elseif ($CVSSData = @($CVE.metrics.cvssMetricV30).Where({ $_.type -eq 'Primary' }).cvssdata) {
                         $CVSSv3Severity = $CVSSData.baseSeverity
                         $CVSSv3Score    = $CVSSData.baseScore
                     }
-                    elseif ($CVSSData = @($CVE.metrics.cvssMetricV31).Where({ $_.type -eq 'Secondary' })) {
+                    elseif ($CVSSData = @($CVE.metrics.cvssMetricV31).Where({ $_.type -eq 'Secondary' }).cvssdata) {
                         $CVSSv3Severity = $CVSSData.baseSeverity
                         $CVSSv3Score    = $CVSSData.baseScore
                     }
-                    elseif ($CVSSData = @($CVE.metrics.cvssMetricV30).Where({ $_.type -eq 'Secondary' })) {
+                    elseif ($CVSSData = @($CVE.metrics.cvssMetricV30).Where({ $_.type -eq 'Secondary' }).cvssdata) {
                         $CVSSv3Severity = $CVSSData.baseSeverity
                         $CVSSv3Score    = $CVSSData.baseScore
                     }
